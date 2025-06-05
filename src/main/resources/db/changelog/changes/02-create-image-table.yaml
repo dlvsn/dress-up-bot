@@ -1,0 +1,28 @@
+databaseChangeLog:
+  - changeSet:
+      id: create-image-table
+      author: Denys Mazurenko
+      changes:
+        - createTable:
+            tableName: images
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    nullable: false
+                    primaryKey: true
+              - column:
+                  name: url
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: ad_id
+                  type: bigint
+                  constraints:
+                    foreignKeyName: fk_images_advertisements
+                    references: advertisements(id)
+                    nullable: false
+                    deleteCascade: false
