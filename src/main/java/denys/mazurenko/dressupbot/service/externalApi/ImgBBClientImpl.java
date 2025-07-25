@@ -9,13 +9,13 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.time.LocalDateTime;
 
-@Component
+@Service
 public class ImgBBClientImpl implements ImgBBClient {
     private static final String BASE_URL ="https://api.imgbb.com/1/upload";
     private final Request.Builder requestBuilder;
@@ -42,7 +42,6 @@ public class ImgBBClientImpl implements ImgBBClient {
         if (!file.exists()) {
             throw new FileNotFoundException("File don't found " + file.getPath());
         }
-
         RequestBody requestBody = buildRequestBody(file);
         Request request = buildRequest(requestBody);
         try (Response response = okHttpClient.newCall(request).execute()) {

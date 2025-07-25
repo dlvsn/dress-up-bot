@@ -1,30 +1,46 @@
-package denys.mazurenko.dressupbot.bot.util;
+package denys.mazurenko.dressupbot.bot.handlers;
 
-import denys.mazurenko.dressupbot.bot.DressUpBot;
-import denys.mazurenko.dressupbot.bot.UpdateHandler;
+import denys.mazurenko.dressupbot.bot.util.TempFileStorage;
+import denys.mazurenko.dressupbot.bot.util.TextTemplates;
 import denys.mazurenko.dressupbot.dto.AdvertisementDto;
 import denys.mazurenko.dressupbot.repository.BotStateStorage;
 import denys.mazurenko.dressupbot.service.AdvertisementService;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
+import org.telegram.abilitybots.api.bot.BaseAbilityBot;
+import org.telegram.abilitybots.api.objects.Flag;
+import org.telegram.abilitybots.api.objects.Reply;
 import org.telegram.abilitybots.api.sender.SilentSender;
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import java.util.function.BiConsumer;
 
 @Component
-@Qualifier("callBackQueryHandler")
-public class CallBackQueryHandler extends UpdateHandler{
+public class CallBackQueryHandler extends UpdateHandler {
     private final AdvertisementService advertisementService;
 
     public CallBackQueryHandler(BotStateStorage botStateStorage,
-                                TempFileStorage tempFileStorage,
                                 AdvertisementService advertisementService) {
-        super(botStateStorage, tempFileStorage);
+        super(botStateStorage);
         this.advertisementService = advertisementService;
     }
 
     @Override
-    public void handle(DressUpBot bot, Update update, int maxUploads) {
+    public String getKey() {
+        return UpdateType.CALLBACK_QUERY.getType();
+    }
+
+    @Override
+    public Reply getReply() {
+        BiConsumer<BaseAbilityBot, Update> action = this::handle;
+        return Reply.of(action,
+                Flag.CALLBACK_QUERY,
+                update -> {
+                    Long chatId = update.getCallbackQuery().getMessage().getChatId();
+                    return botStateStorage.isUserActive(chatId);
+                });
+    }
+
+    private void handle(BaseAbilityBot bot, Update update) {
         CallbackQuery callbackQuery = update.getCallbackQuery();
         Long chatId = callbackQuery.getMessage().getChatId();
         String data = callbackQuery.getData();

@@ -1,6 +1,6 @@
 package denys.mazurenko.dressupbot.repository;
 
-import denys.mazurenko.dressupbot.bot.UserState;
+import denys.mazurenko.dressupbot.bot.handlers.UserState;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;

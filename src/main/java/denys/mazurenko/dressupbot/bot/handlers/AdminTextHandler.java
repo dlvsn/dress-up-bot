@@ -1,57 +1,94 @@
-package denys.mazurenko.dressupbot.bot;
+package denys.mazurenko.dressupbot.bot.handlers;
 
 import denys.mazurenko.dressupbot.bot.util.TempFileStorage;
+import denys.mazurenko.dressupbot.bot.util.TextTemplates;
+import denys.mazurenko.dressupbot.config.BotProperties;
 import denys.mazurenko.dressupbot.dto.AdvertisementDto;
+import denys.mazurenko.dressupbot.dto.CategoryRequestDto;
+import denys.mazurenko.dressupbot.dto.CategoryResponseDto;
 import denys.mazurenko.dressupbot.dto.ImageResponseDto;
 import denys.mazurenko.dressupbot.repository.AdDraftStorage;
 import denys.mazurenko.dressupbot.service.AdvertisementService;
 import denys.mazurenko.dressupbot.repository.BotStateStorage;
+import denys.mazurenko.dressupbot.service.CategoryService;
 import denys.mazurenko.dressupbot.service.ImageService;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
+import org.telegram.abilitybots.api.bot.BaseAbilityBot;
+import org.telegram.abilitybots.api.objects.Flag;
+import org.telegram.abilitybots.api.objects.Reply;
 import org.telegram.abilitybots.api.sender.SilentSender;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import java.io.File;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.function.BiConsumer;
 
 @Component
-@Qualifier("textHandler")
-public class TextHandler extends UpdateHandler {
+public class AdminTextHandler extends UpdateHandler {
+    private static final List<String> addSelection = List.of("/ad", "/category");
+    private static final int AD = 0;
+    private static final int CATEGORY = 1;
     private static final String KEY_NAME = "name";
     private static final String KEY_DESCRIPTION = "description";
     private static final String KEY_PRICE = "price";
     private final AdDraftStorage adDraftStorage;
     private final ImageService imageService;
     private final AdvertisementService advertisementService;
+    private final CategoryService categoryService;
+    private final Long creatorId;
 
-    public TextHandler(BotStateStorage botStateStorage,
-                       TempFileStorage tempFileStorage,
-                       ImageService imageService,
-                       AdvertisementService advertisementService,
-                       AdDraftStorage adDraftStorage) {
+    public AdminTextHandler(BotStateStorage botStateStorage,
+                            TempFileStorage tempFileStorage,
+                            ImageService imageService,
+                            AdvertisementService advertisementService,
+                            AdDraftStorage adDraftStorage,
+                            CategoryService categoryService,
+                            BotProperties botProperties) {
         super(botStateStorage, tempFileStorage);
         this.imageService = imageService;
         this.advertisementService = advertisementService;
         this.adDraftStorage = adDraftStorage;
+        this.categoryService = categoryService;
+        this.creatorId = botProperties.getCreatorId();
     }
 
     @Override
-    public void handle(DressUpBot bot,
-                       Update update,
-                       int maxUploads) {
+    public String getKey() {
+        return UpdateType.ADMIN_TEXT.getType();
+    }
+
+    @Override
+    public Reply getReply() {
+        BiConsumer<BaseAbilityBot, Update> action = this::handle;
+        return Reply.of(action,
+                Flag.TEXT,
+                update -> checkIsUserAdmin(update.getMessage().getChatId())
+        );
+    }
+
+    private void handle(BaseAbilityBot bot,
+                       Update update) {
         String text = update.getMessage().getText();
         Long chatId = update.getMessage().getChatId();
         SilentSender silentSender = bot.silent();
+        if (text != null && text.equalsIgnoreCase("/stop")) {
+            handleStop(silentSender, update);
+        }
         if (text != null && text.equalsIgnoreCase("/next")) {
             botStateStorage.updateChatState(chatId, UserState.PHOTO_RECEIVED);
         }
-        handleStop(silentSender, update);
         switch (botStateStorage.getChatState(chatId)) {
             case START -> handleCreate(
                     silentSender,
-                    update,
-                    maxUploads);
+                    update);
+
+            case AD_CATEGORY -> handleSelection(
+                    silentSender,
+                    update);
+
+            case AWAITING_CATEGORY_NAME -> handleCreateCategory(
+                    silentSender,
+                    update);
 
             case AWAITING_PHOTO ->
                     handleAwaitingPhoto(
@@ -85,14 +122,39 @@ public class TextHandler extends UpdateHandler {
         }
     }
 
+    private void handleCreateCategory(SilentSender silentSender, Update update) {
+        Long chatId = update.getMessage().getChatId();
+        String text = update.getMessage().getText();
+        CategoryRequestDto categoryRequestDto = new CategoryRequestDto(text);
+        CategoryResponseDto categoryResponseDto = categoryService.saveCategory(categoryRequestDto);
+        silentSender.send("Категорія успішно збережена " + categoryResponseDto, chatId);
+        botStateStorage.updateChatState(chatId, UserState.START);
+        silentSender.send(TextTemplates.ADD_CATEGORY_OR_AD, chatId);
+    }
+
     private void handleCreate(SilentSender sender,
-                              Update update,
-                              int maxUploads) {
+                              Update update) {
+        Long chatId = update.getMessage().getChatId();
         String message = update.getMessage().getText();
         if (message.equalsIgnoreCase("/create")) {
-            String text = "Ви можете додати до оголошення " + maxUploads + " фото. Будь ласка, надішліть мені фото.";
-            sender.send(text, update.getMessage().getChatId());
-            botStateStorage.updateChatState(update.getMessage().getChatId(), UserState.AWAITING_PHOTO);
+            sender.send(TextTemplates.ADD_CATEGORY_OR_AD, chatId);
+            botStateStorage.updateChatState(chatId, UserState.AD_CATEGORY);
+        }
+    }
+
+    private void handleSelection(SilentSender sender, Update update) {
+        String text = update.getMessage().getText();
+        Long chatId = update.getMessage().getChatId();
+        if (text.equalsIgnoreCase(addSelection.get(CATEGORY))) {
+            sender.send("Введи назву категорії", chatId);
+            botStateStorage.updateChatState(chatId, UserState.AWAITING_CATEGORY_NAME);
+        } else if (text.equalsIgnoreCase(addSelection.get(AD)) && categoryService.isCategoryExists()) {
+            sender.send("Надішли будь ласка 2 фотографії", chatId);
+            botStateStorage.updateChatState(chatId, UserState.AWAITING_PHOTO);
+        } else if (!categoryService.isCategoryExists()){
+            sender.send("Додай спочатку категорії", chatId);
+        } else {
+            sender.send("Обери одне з двох!", chatId);
         }
     }
 
@@ -144,6 +206,9 @@ public class TextHandler extends UpdateHandler {
             List<String> imageUrls = getImageUrls();
             AdvertisementDto advertisementDto = advertisementService.saveAdd(initAddDto(imageUrls));
             sender.send("Замовлення успішно збережене! Id заомлення: " + advertisementDto.getId(), chatId);
+            sender.send("Якщо бажаєте додати замовлення, скористайтесь командою /create\nЩоб переглянути завантажені замовлення /find", chatId);
+            botStateStorage.updateChatState(chatId, UserState.START);
+            tempFileStorage.clearFileStorage();
         }
     }
 
@@ -163,21 +228,33 @@ public class TextHandler extends UpdateHandler {
 
     private List<String> getImageUrls() {
         List<File> files = tempFileStorage.getFiles();
-        return imageService.saveImages(files)
-                .stream()
-                .map(ImageResponseDto::url)
-                .toList();
+        if (files != null) {
+            return imageService.saveImages(files)
+                    .stream()
+                    .map(ImageResponseDto::url)
+                    .toList();
+        }
+        return List.of("EmptyList");
     }
 
     private AdvertisementDto initAddDto(List<String> imgUrls) {
         AdvertisementDto advertisementDto = new AdvertisementDto();
         advertisementDto.setImgUrls(imgUrls);
-        String itemName = (String) adDraftStorage.getDraft(KEY_NAME);
-        String description = (String) adDraftStorage.getDraft(KEY_DESCRIPTION);
-        String price = (String) adDraftStorage.getDraft(KEY_PRICE);
-        advertisementDto.setName(itemName);
-        advertisementDto.setDescription(description);
-        advertisementDto.setPrice(BigDecimal.valueOf(Integer.parseInt(price)));
+        advertisementDto.setName(
+                (String) adDraftStorage.getDraft(KEY_NAME)
+        );
+        advertisementDto.setDescription(
+                (String) adDraftStorage.getDraft(KEY_DESCRIPTION)
+        );
+        advertisementDto.setPrice(BigDecimal.valueOf(
+                Integer.parseInt(
+                (String) adDraftStorage.getDraft(KEY_PRICE))
+                )
+        );
         return advertisementDto;
+    }
+
+    private boolean checkIsUserAdmin(Long chatId) {
+        return botStateStorage.getChatState(creatorId) != UserState.FIND && chatId.equals(creatorId);
     }
 }

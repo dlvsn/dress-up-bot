@@ -15,7 +15,8 @@ import java.util.List;
 public interface AdvertisementMapper {
 
     @AfterMapping
-    default void setImageUrls(@MappingTarget AdvertisementDto advertisementDto, Advertisement advertisement) {
+    default void setImageUrls(@MappingTarget AdvertisementDto advertisementDto,
+                              Advertisement advertisement) {
         if (advertisement.getImages() != null) {
             List<String> imageIds = advertisement.getImages().stream().map(Image::getUrl).toList();
             advertisementDto.setImgUrls(imageIds);

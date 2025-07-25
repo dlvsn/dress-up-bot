@@ -1,6 +1,6 @@
 package denys.mazurenko.dressupbot.repository;
 
-import denys.mazurenko.dressupbot.bot.UserState;
+import denys.mazurenko.dressupbot.bot.handlers.UserState;
 
 public interface BotStateStorage {
     UserState getChatState(Long chatId);

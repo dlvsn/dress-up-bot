@@ -12,20 +12,11 @@ import java.util.List;
 public class TempFileStorage {
     private final List<File> files;
 
-    public void addFile(File file) {
-        files.add(file);
+    public boolean addFile(File file) {
+        return files.add(file);
     }
 
     public void clearFileStorage() {
-        files.forEach(this::deleteFiles);
         files.clear();
-    }
-
-    private boolean deleteFiles(File file) {
-        System.out.println(file.exists());
-        if (file.exists()) {
-            return file.delete();
-        }
-        return false;
     }
 }
